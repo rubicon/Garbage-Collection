@@ -1,11 +1,33 @@
 blueprint:
   name: Include and exclude dates
   description: >-
-    Remove a collection on provided set of dates. Then, add collection on set of additional collection dates.
-    After updating the list, make sure to trigger sensor update. The sensors are normally updated once a day.
-    The update can be triggered by updating the integration configuration.
+    This automation is triggered from the `garbage_collection` integration by event `garbage_collection_loaded`,
+    during the device state update. 
+
+    It PROCESSES DATA SENT WITH THE EVENT, and then FINISHES THE UPDATE.
+    DO NOT CALL THIS SERVICE MANUALLY, IT WON'T WORK (it won't have the data).
+
+    Also, make sure the INTEGRATION IS CONFIGURED FOR `manual_update`
+    (that will disable the state update by the integration and pass it to this automation).
+
+
+    It removes events on provided set of dates. Then, adds events on set of additional collection dates.
+    Enter one date per line. For example:
+
+    2022-01-03
+
+    2022-04-04
+
+    2022-07-04
+
+    2022-10-03
+
+
+    After updating the list, make sure to trigger the entity update. 
+    The sensors are normally updated once a day, or when Home Assistant starts.
+    The update can be triggered by updating the integration configuration (just hit configure and submit).
   domain: automation
-  source_url: https://github.com/bruxy70/Garbage-Collection/blob/development/blueprints/include_exclude.yaml
+  source_url: https://github.com/bruxy70/Garbage-Collection/blob/master/blueprints/include_exclude.yaml
   input:
     garbage_collection_entity:
       name: Garbage Collection Entity
@@ -15,15 +37,15 @@ blueprint:
           integration: garbage_collection
     exclude:
       name: Set of dates to exclude
-      description: >-
-        List of dates in format yyyy-mm-dd, one date per line
+      description: |-
+        List of dates in format yyyy-mm-dd, one date per line.
       selector:
         text:
           multiline: true
     include:
       name: Set of dates to include
-      description: >-
-        List of dates in format yyyy-mm-dd, one date per line
+      description: |-
+        List of dates in format yyyy-mm-dd, one date per line.
       selector:
         text:
           multiline: true
@@ -37,20 +59,25 @@ action:
   - variables:
       exclude: !input exclude
       include: !input include
-  - repeat:
-      count: "{{ exclude.split('\n') | count }}"
+  - alias: "Iterate through the lines to exclude"
+    repeat:
+      for_each: "{{ exclude.split('\n') }}"
       sequence:
-        - service: garbage_collection.remove_date
+        - alias: "Remove the date"
+          service: garbage_collection.remove_date
           data:
             entity_id: "{{ trigger.event.data.entity_id }}"
-            date: "{{ exclude.split('\n')[repeat.index-1] }}"
-  - repeat:
-      count: "{{ include.split('\n') | count }}"
+            date: "{{ repeat.item }}"
+  - alias: "Iterate through the lines to include"
+    repeat:
+      for_each: "{{ include.split('\n') }}"
       sequence:
-        - service: garbage_collection.add_date
+        - alias: "Add the date"
+          service: garbage_collection.add_date
           data:
             entity_id: "{{ trigger.event.data.entity_id }}"
-            date: "{{ include.split('\n')[repeat.index-1] }}"
-  - service: garbage_collection.update_state
+            date: "{{ repeat.item }}"
+  - alias: "Update the garbage_collection entity"
+    service: garbage_collection.update_state
     data:
       entity_id: "{{ trigger.event.data.entity_id }}"
